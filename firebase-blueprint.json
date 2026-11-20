@@ -1,0 +1,293 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated platform user profile and preferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "jobTitle": { "type": "string", "maxLength": 120 },
+        "department": { "type": "string", "maxLength": 120 },
+        "notifyOnReview": { "type": "boolean" },
+        "notifyOnHandover": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "jobTitle", "department", "notifyOnReview", "notifyOnHandover", "createdAt", "updatedAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Project workspace requiring knowledge reconstruction and handover.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "code": { "type": "string", "minLength": 2, "maxLength": 32 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["active", "handover_in_progress", "review_pending", "completed", "archived"] },
+        "department": { "type": "string", "maxLength": 100 },
+        "departingMember": { "type": "string", "maxLength": 120 },
+        "departingRole": { "type": "string", "maxLength": 120 },
+        "incomingMember": { "type": "string", "maxLength": 120 },
+        "incomingRole": { "type": "string", "maxLength": 120 },
+        "targetHandoverDate": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "code", "description", "status", "department", "departingMember", "departingRole", "incomingMember", "incomingRole", "targetHandoverDate", "createdAt", "updatedAt"]
+    },
+    "ProjectMember": {
+      "title": "ProjectMember",
+      "description": "Authorised project team member and handover participant.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberName": { "type": "string", "maxLength": 120 },
+        "memberEmail": { "type": "string", "maxLength": 256 },
+        "role": { "type": "string", "maxLength": 100 },
+        "handoverRole": { "type": "string", "enum": ["departing", "incoming", "reviewer", "stakeholder"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "memberName", "memberEmail", "role", "handoverRole", "createdAt", "updatedAt"]
+    },
+    "ProjectDocument": {
+      "title": "ProjectDocument",
+      "description": "Uploaded project artifact and extracted plain text content.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fileName": { "type": "string", "maxLength": 240 },
+        "fileType": { "type": "string", "enum": ["pdf", "docx", "txt", "md"] },
+        "fileSize": { "type": "number" },
+        "extractedText": { "type": "string", "maxLength": 150000 },
+        "pageCount": { "type": "number" },
+        "analysisStatus": { "type": "string", "enum": ["uploaded", "analysed", "error"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "fileName", "fileType", "fileSize", "extractedText", "pageCount", "analysisStatus", "createdAt", "updatedAt"]
+    },
+    "ExtractedKnowledge": {
+      "title": "ExtractedKnowledge",
+      "description": "High-level AI knowledge reconstruction summary, timeline, contradictions, and missing info.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "executiveSummary": { "type": "string", "maxLength": 5000 },
+        "completedWorkSummary": { "type": "string", "maxLength": 5000 },
+        "timelineEvents": { "type": "string", "maxLength": 10000 },
+        "contradictions": { "type": "string", "maxLength": 10000 },
+        "missingInformation": { "type": "string", "maxLength": 10000 },
+        "unresolvedQuestions": { "type": "string", "maxLength": 10000 },
+        "recommendedNextActions": { "type": "string", "maxLength": 10000 },
+        "confidenceScore": { "type": "number" },
+        "sourceDocumentCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "executiveSummary", "completedWorkSummary", "timelineEvents", "contradictions", "missingInformation", "unresolvedQuestions", "recommendedNextActions", "confidenceScore", "sourceDocumentCount", "createdAt", "updatedAt"]
+    },
+    "Decision": {
+      "title": "Decision",
+      "description": "Extracted project architectural, operational, or product decision linked to source evidence.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 3000 },
+        "rationale": { "type": "string", "maxLength": 2000 },
+        "decisionMaker": { "type": "string", "maxLength": 160 },
+        "decisionDate": { "type": "string", "maxLength": 80 },
+        "evidenceType": { "type": "string", "enum": ["verified", "inferred"] },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+        "sourceDocumentName": { "type": "string", "maxLength": 240 },
+        "sourceQuote": { "type": "string", "maxLength": 1500 },
+        "reviewStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "reviewerComment": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "title", "description", "rationale", "decisionMaker", "decisionDate", "evidenceType", "confidence", "sourceDocumentName", "sourceQuote", "reviewStatus", "reviewerComment", "createdAt", "updatedAt"]
+    },
+    "TaskItem": {
+      "title": "TaskItem",
+      "description": "Completed or pending project task extracted with evidence-backed ownership.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 3000 },
+        "taskStatus": { "type": "string", "enum": ["completed", "in_progress", "pending", "blocked"] },
+        "priority": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+        "assignedOwner": { "type": "string", "maxLength": 160 },
+        "evidenceType": { "type": "string", "enum": ["verified", "inferred"] },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+        "sourceDocumentName": { "type": "string", "maxLength": 240 },
+        "sourceQuote": { "type": "string", "maxLength": 1500 },
+        "reviewStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "reviewerComment": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "title", "description", "taskStatus", "priority", "assignedOwner", "evidenceType", "confidence", "sourceDocumentName", "sourceQuote", "reviewStatus", "reviewerComment", "createdAt", "updatedAt"]
+    },
+    "RiskItem": {
+      "title": "RiskItem",
+      "description": "Project risk or blocker extracted from project documentation.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 3000 },
+        "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+        "mitigationPlan": { "type": "string", "maxLength": 2000 },
+        "evidenceType": { "type": "string", "enum": ["verified", "inferred"] },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+        "sourceDocumentName": { "type": "string", "maxLength": 240 },
+        "sourceQuote": { "type": "string", "maxLength": 1500 },
+        "reviewStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "reviewerComment": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "title", "description", "severity", "mitigationPlan", "evidenceType", "confidence", "sourceDocumentName", "sourceQuote", "reviewStatus", "reviewerComment", "createdAt", "updatedAt"]
+    },
+    "DependencyItem": {
+      "title": "DependencyItem",
+      "description": "Internal or external dependency affecting project execution.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "dependencyType": { "type": "string", "enum": ["technical", "vendor", "team", "regulatory", "infrastructure"] },
+        "status": { "type": "string", "enum": ["active", "at_risk", "blocked", "resolved"] },
+        "ownerContact": { "type": "string", "maxLength": 160 },
+        "sourceDocumentName": { "type": "string", "maxLength": 240 },
+        "sourceQuote": { "type": "string", "maxLength": 1500 },
+        "reviewStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "reviewerComment": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "name", "description", "dependencyType", "status", "ownerContact", "sourceDocumentName", "sourceQuote", "reviewStatus", "reviewerComment", "createdAt", "updatedAt"]
+    },
+    "ReviewLog": {
+      "title": "ReviewLog",
+      "description": "Human review revision history record for an extracted finding.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "findingId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "findingCategory": { "type": "string", "enum": ["decision", "task", "risk", "dependency"] },
+        "findingTitle": { "type": "string", "maxLength": 300 },
+        "previousStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "newStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "comment": { "type": "string", "maxLength": 1000 },
+        "reviewerName": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "findingId", "findingCategory", "findingTitle", "previousStatus", "newStatus", "comment", "reviewerName", "createdAt"]
+    },
+    "HandoverReport": {
+      "title": "HandoverReport",
+      "description": "Structured role-specific handover package generated from reviewed project knowledge.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 240 },
+        "targetRole": { "type": "string", "enum": ["all", "engineering", "product", "operations", "executive"] },
+        "recipientName": { "type": "string", "maxLength": 120 },
+        "overviewSection": { "type": "string", "maxLength": 8000 },
+        "completedWorkSection": { "type": "string", "maxLength": 8000 },
+        "pendingWorkSection": { "type": "string", "maxLength": 8000 },
+        "decisionsSection": { "type": "string", "maxLength": 8000 },
+        "risksDependenciesSection": { "type": "string", "maxLength": 8000 },
+        "unresolvedIssuesSection": { "type": "string", "maxLength": 8000 },
+        "nextActionsSection": { "type": "string", "maxLength": 8000 },
+        "shareStatus": { "type": "string", "enum": ["draft", "published"] },
+        "sharedWithEmails": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "title", "targetRole", "recipientName", "overviewSection", "completedWorkSection", "pendingWorkSection", "decisionsSection", "risksDependenciesSection", "unresolvedIssuesSection", "nextActionsSection", "shareStatus", "sharedWithEmails", "createdAt", "updatedAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Audit trail event for project, document, analysis, review, and handover actions.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectName": { "type": "string", "maxLength": 140 },
+        "actionType": { "type": "string", "enum": ["project_created", "project_updated", "document_uploaded", "ai_analysis_completed", "finding_reviewed", "handover_generated"] },
+        "summary": { "type": "string", "maxLength": 500 },
+        "actorName": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "projectId", "projectName", "actionType", "summary", "actorName", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile and notification settings isolated to the authenticated owner."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Projects owned and managed by authenticated users."
+    },
+    "/projectMembers/{memberId}": {
+      "schema": { "$ref": "#/entities/ProjectMember" },
+      "description": "Project members associated with a project."
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/ProjectDocument" },
+      "description": "Uploaded project documents and extracted text."
+    },
+    "/extractedKnowledge/{knowledgeId}": {
+      "schema": { "$ref": "#/entities/ExtractedKnowledge" },
+      "description": "AI reconstructed project summary, timeline, contradictions, and missing info."
+    },
+    "/decisions/{decisionId}": {
+      "schema": { "$ref": "#/entities/Decision" },
+      "description": "Extracted project decisions linked to source documents."
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/TaskItem" },
+      "description": "Extracted completed and pending tasks with evidence-linked owners."
+    },
+    "/risks/{riskId}": {
+      "schema": { "$ref": "#/entities/RiskItem" },
+      "description": "Extracted project risks and blockers."
+    },
+    "/dependencies/{dependencyId}": {
+      "schema": { "$ref": "#/entities/DependencyItem" },
+      "description": "Extracted technical, vendor, and team dependencies."
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/ReviewLog" },
+      "description": "Revision and approval history for extracted knowledge findings."
+    },
+    "/handovers/{handoverId}": {
+      "schema": { "$ref": "#/entities/HandoverReport" },
+      "description": "Structured handover reports for incoming team members."
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Chronological activity logs across projects."
+    }
+  }
+}

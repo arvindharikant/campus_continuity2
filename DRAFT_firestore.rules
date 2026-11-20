@@ -1,0 +1,527 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1 & Phase 4.1: Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'arvindharikant@gmail.com'
+      );
+    }
+
+    function isValidParentProject(projectId) {
+      return exists(/databases/$(database)/documents/projects/$(projectId)) &&
+        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid;
+    }
+
+    // Validation Blueprint: User
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'jobTitle', 'department', 'notifyOnReview', 'notifyOnHandover', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'jobTitle', 'department', 'notifyOnReview', 'notifyOnHandover', 'createdAt', 'updatedAt']) &&
+        data.uid == request.auth.uid &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 256 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
+        data.jobTitle is string && data.jobTitle.size() <= 120 &&
+        data.department is string && data.department.size() <= 120 &&
+        data.notifyOnReview is bool &&
+        data.notifyOnHandover is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: Project
+    function isValidProject(data) {
+      return data.keys().hasAll(['ownerId', 'name', 'code', 'description', 'status', 'department', 'departingMember', 'departingRole', 'incomingMember', 'incomingRole', 'targetHandoverDate', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'name', 'code', 'description', 'status', 'department', 'departingMember', 'departingRole', 'incomingMember', 'incomingRole', 'targetHandoverDate', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 140 &&
+        data.code is string && data.code.size() >= 2 && data.code.size() <= 32 &&
+        data.description is string && data.description.size() <= 2000 &&
+        data.status is string && data.status.size() <= 40 && data.status in ['active', 'handover_in_progress', 'review_pending', 'completed', 'archived'] &&
+        data.department is string && data.department.size() <= 100 &&
+        data.departingMember is string && data.departingMember.size() <= 120 &&
+        data.departingRole is string && data.departingRole.size() <= 120 &&
+        data.incomingMember is string && data.incomingMember.size() <= 120 &&
+        data.incomingRole is string && data.incomingRole.size() <= 120 &&
+        data.targetHandoverDate is string && data.targetHandoverDate.size() <= 40 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ProjectMember
+    function isValidProjectMember(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'memberName', 'memberEmail', 'role', 'handoverRole', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'memberName', 'memberEmail', 'role', 'handoverRole', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.memberName is string && data.memberName.size() >= 1 && data.memberName.size() <= 120 &&
+        data.memberEmail is string && data.memberEmail.size() >= 3 && data.memberEmail.size() <= 256 &&
+        data.role is string && data.role.size() <= 100 &&
+        data.handoverRole is string && data.handoverRole.size() <= 30 && data.handoverRole in ['departing', 'incoming', 'reviewer', 'stakeholder'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ProjectDocument
+    function isValidProjectDocument(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'fileName', 'fileType', 'fileSize', 'extractedText', 'pageCount', 'analysisStatus', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'fileName', 'fileType', 'fileSize', 'extractedText', 'pageCount', 'analysisStatus', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 240 &&
+        data.fileType is string && data.fileType.size() <= 16 && data.fileType in ['pdf', 'docx', 'txt', 'md'] &&
+        data.fileSize is number && data.fileSize >= 0 && data.fileSize <= 25000000 &&
+        data.extractedText is string && data.extractedText.size() <= 150000 &&
+        data.pageCount is number && data.pageCount >= 1 && data.pageCount <= 5000 &&
+        data.analysisStatus is string && data.analysisStatus.size() <= 20 && data.analysisStatus in ['uploaded', 'analysed', 'error'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ExtractedKnowledge
+    function isValidExtractedKnowledge(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'executiveSummary', 'completedWorkSummary', 'timelineEvents', 'contradictions', 'missingInformation', 'unresolvedQuestions', 'recommendedNextActions', 'confidenceScore', 'sourceDocumentCount', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'executiveSummary', 'completedWorkSummary', 'timelineEvents', 'contradictions', 'missingInformation', 'unresolvedQuestions', 'recommendedNextActions', 'confidenceScore', 'sourceDocumentCount', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.executiveSummary is string && data.executiveSummary.size() <= 5000 &&
+        data.completedWorkSummary is string && data.completedWorkSummary.size() <= 5000 &&
+        data.timelineEvents is string && data.timelineEvents.size() <= 10000 &&
+        data.contradictions is string && data.contradictions.size() <= 10000 &&
+        data.missingInformation is string && data.missingInformation.size() <= 10000 &&
+        data.unresolvedQuestions is string && data.unresolvedQuestions.size() <= 10000 &&
+        data.recommendedNextActions is string && data.recommendedNextActions.size() <= 10000 &&
+        data.confidenceScore is number && data.confidenceScore >= 0 && data.confidenceScore <= 100 &&
+        data.sourceDocumentCount is number && data.sourceDocumentCount >= 0 && data.sourceDocumentCount <= 500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: Decision
+    function isValidDecision(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'title', 'description', 'rationale', 'decisionMaker', 'decisionDate', 'evidenceType', 'confidence', 'sourceDocumentName', 'sourceQuote', 'reviewStatus', 'reviewerComment', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'title', 'description', 'rationale', 'decisionMaker', 'decisionDate', 'evidenceType', 'confidence', 'sourceDocumentName', 'sourceQuote', 'reviewStatus', 'reviewerComment', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+        data.description is string && data.description.size() <= 3000 &&
+        data.rationale is string && data.rationale.size() <= 2000 &&
+        data.decisionMaker is string && data.decisionMaker.size() <= 160 &&
+        data.decisionDate is string && data.decisionDate.size() <= 80 &&
+        data.evidenceType is string && data.evidenceType.size() <= 20 && data.evidenceType in ['verified', 'inferred'] &&
+        data.confidence is string && data.confidence.size() <= 20 && data.confidence in ['high', 'medium', 'low'] &&
+        data.sourceDocumentName is string && data.sourceDocumentName.size() <= 240 &&
+        data.sourceQuote is string && data.sourceQuote.size() <= 1500 &&
+        data.reviewStatus is string && data.reviewStatus.size() <= 20 && data.reviewStatus in ['pending', 'approved', 'rejected'] &&
+        data.reviewerComment is string && data.reviewerComment.size() <= 1000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: TaskItem
+    function isValidTaskItem(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'title', 'description', 'taskStatus', 'priority', 'assignedOwner', 'evidenceType', 'confidence', 'sourceDocumentName', 'sourceQuote', 'reviewStatus', 'reviewerComment', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'title', 'description', 'taskStatus', 'priority', 'assignedOwner', 'evidenceType', 'confidence', 'sourceDocumentName', 'sourceQuote', 'reviewStatus', 'reviewerComment', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+        data.description is string && data.description.size() <= 3000 &&
+        data.taskStatus is string && data.taskStatus.size() <= 20 && data.taskStatus in ['completed', 'in_progress', 'pending', 'blocked'] &&
+        data.priority is string && data.priority.size() <= 20 && data.priority in ['critical', 'high', 'medium', 'low'] &&
+        data.assignedOwner is string && data.assignedOwner.size() <= 160 &&
+        data.evidenceType is string && data.evidenceType.size() <= 20 && data.evidenceType in ['verified', 'inferred'] &&
+        data.confidence is string && data.confidence.size() <= 20 && data.confidence in ['high', 'medium', 'low'] &&
+        data.sourceDocumentName is string && data.sourceDocumentName.size() <= 240 &&
+        data.sourceQuote is string && data.sourceQuote.size() <= 1500 &&
+        data.reviewStatus is string && data.reviewStatus.size() <= 20 && data.reviewStatus in ['pending', 'approved', 'rejected'] &&
+        data.reviewerComment is string && data.reviewerComment.size() <= 1000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: RiskItem
+    function isValidRiskItem(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'title', 'description', 'severity', 'mitigationPlan', 'evidenceType', 'confidence', 'sourceDocumentName', 'sourceQuote', 'reviewStatus', 'reviewerComment', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'title', 'description', 'severity', 'mitigationPlan', 'evidenceType', 'confidence', 'sourceDocumentName', 'sourceQuote', 'reviewStatus', 'reviewerComment', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+        data.description is string && data.description.size() <= 3000 &&
+        data.severity is string && data.severity.size() <= 20 && data.severity in ['critical', 'high', 'medium', 'low'] &&
+        data.mitigationPlan is string && data.mitigationPlan.size() <= 2000 &&
+        data.evidenceType is string && data.evidenceType.size() <= 20 && data.evidenceType in ['verified', 'inferred'] &&
+        data.confidence is string && data.confidence.size() <= 20 && data.confidence in ['high', 'medium', 'low'] &&
+        data.sourceDocumentName is string && data.sourceDocumentName.size() <= 240 &&
+        data.sourceQuote is string && data.sourceQuote.size() <= 1500 &&
+        data.reviewStatus is string && data.reviewStatus.size() <= 20 && data.reviewStatus in ['pending', 'approved', 'rejected'] &&
+        data.reviewerComment is string && data.reviewerComment.size() <= 1000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: DependencyItem
+    function isValidDependencyItem(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'name', 'description', 'dependencyType', 'status', 'ownerContact', 'sourceDocumentName', 'sourceQuote', 'reviewStatus', 'reviewerComment', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'name', 'description', 'dependencyType', 'status', 'ownerContact', 'sourceDocumentName', 'sourceQuote', 'reviewStatus', 'reviewerComment', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 300 &&
+        data.description is string && data.description.size() <= 2000 &&
+        data.dependencyType is string && data.dependencyType.size() <= 25 && data.dependencyType in ['technical', 'vendor', 'team', 'regulatory', 'infrastructure'] &&
+        data.status is string && data.status.size() <= 20 && data.status in ['active', 'at_risk', 'blocked', 'resolved'] &&
+        data.ownerContact is string && data.ownerContact.size() <= 160 &&
+        data.sourceDocumentName is string && data.sourceDocumentName.size() <= 240 &&
+        data.sourceQuote is string && data.sourceQuote.size() <= 1500 &&
+        data.reviewStatus is string && data.reviewStatus.size() <= 20 && data.reviewStatus in ['pending', 'approved', 'rejected'] &&
+        data.reviewerComment is string && data.reviewerComment.size() <= 1000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ReviewLog
+    function isValidReviewLog(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'findingId', 'findingCategory', 'findingTitle', 'previousStatus', 'newStatus', 'comment', 'reviewerName', 'createdAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'findingId', 'findingCategory', 'findingTitle', 'previousStatus', 'newStatus', 'comment', 'reviewerName', 'createdAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        isValidId(data.findingId) &&
+        data.findingCategory is string && data.findingCategory.size() <= 20 && data.findingCategory in ['decision', 'task', 'risk', 'dependency'] &&
+        data.findingTitle is string && data.findingTitle.size() >= 1 && data.findingTitle.size() <= 300 &&
+        data.previousStatus is string && data.previousStatus.size() <= 20 && data.previousStatus in ['pending', 'approved', 'rejected'] &&
+        data.newStatus is string && data.newStatus.size() <= 20 && data.newStatus in ['pending', 'approved', 'rejected'] &&
+        data.comment is string && data.comment.size() <= 1000 &&
+        data.reviewerName is string && data.reviewerName.size() <= 120 &&
+        data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint: HandoverReport
+    function isValidHandoverReport(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'title', 'targetRole', 'recipientName', 'overviewSection', 'completedWorkSection', 'pendingWorkSection', 'decisionsSection', 'risksDependenciesSection', 'unresolvedIssuesSection', 'nextActionsSection', 'shareStatus', 'sharedWithEmails', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'title', 'targetRole', 'recipientName', 'overviewSection', 'completedWorkSection', 'pendingWorkSection', 'decisionsSection', 'risksDependenciesSection', 'unresolvedIssuesSection', 'nextActionsSection', 'shareStatus', 'sharedWithEmails', 'createdAt', 'updatedAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 240 &&
+        data.targetRole is string && data.targetRole.size() <= 25 && data.targetRole in ['all', 'engineering', 'product', 'operations', 'executive'] &&
+        data.recipientName is string && data.recipientName.size() <= 120 &&
+        data.overviewSection is string && data.overviewSection.size() <= 8000 &&
+        data.completedWorkSection is string && data.completedWorkSection.size() <= 8000 &&
+        data.pendingWorkSection is string && data.pendingWorkSection.size() <= 8000 &&
+        data.decisionsSection is string && data.decisionsSection.size() <= 8000 &&
+        data.risksDependenciesSection is string && data.risksDependenciesSection.size() <= 8000 &&
+        data.unresolvedIssuesSection is string && data.unresolvedIssuesSection.size() <= 8000 &&
+        data.nextActionsSection is string && data.nextActionsSection.size() <= 8000 &&
+        data.shareStatus is string && data.shareStatus.size() <= 20 && data.shareStatus in ['draft', 'published'] &&
+        data.sharedWithEmails is string && data.sharedWithEmails.size() <= 1000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ActivityLog
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['ownerId', 'projectId', 'projectName', 'actionType', 'summary', 'actorName', 'createdAt']) &&
+        data.keys().hasOnly(['ownerId', 'projectId', 'projectName', 'actionType', 'summary', 'actorName', 'createdAt']) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        isValidId(data.projectId) &&
+        data.projectName is string && data.projectName.size() >= 1 && data.projectName.size() <= 140 &&
+        data.actionType is string && data.actionType.size() <= 40 && data.actionType in ['project_created', 'project_updated', 'document_uploaded', 'ai_analysis_completed', 'finding_reviewed', 'handover_generated'] &&
+        data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500 &&
+        data.actorName is string && data.actorName.size() <= 120 &&
+        data.createdAt is timestamp;
+    }
+
+    // 0. Connection test collection (Read-only for signed-in users, never writable)
+    match /test/{docId} {
+      allow get: if isSignedIn() && isValidId(docId);
+      allow list, create, update, delete: if false;
+    }
+
+    // 1. Users Collection (Pillar 6: PII Isolation - Owner or Admin only, no list)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if false;
+      allow create: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId &&
+        isValidUser(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() || (
+          request.auth.uid == userId &&
+          existing().uid == request.auth.uid &&
+          incoming().uid == existing().uid &&
+          incoming().email == existing().email &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'jobTitle', 'department', 'notifyOnReview', 'notifyOnHandover', 'updatedAt'])
+        )
+      );
+      allow delete: if false;
+    }
+
+    // 2. Projects Collection
+    match /projects/{projectId} {
+      allow get: if isSignedIn() && isValidId(projectId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(projectId) &&
+        isValidProject(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(projectId) && isValidProject(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          existing().status != 'archived' &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'code', 'description', 'status', 'department', 'departingMember', 'departingRole', 'incomingMember', 'incomingRole', 'targetHandoverDate', 'updatedAt'])
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(projectId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 3. Project Members Collection
+    match /projectMembers/{memberId} {
+      allow get: if isSignedIn() && isValidId(memberId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(memberId) &&
+        isValidProjectMember(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(memberId) && isValidProjectMember(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['memberName', 'memberEmail', 'role', 'handoverRole', 'updatedAt']) &&
+          isValidParentProject(existing().projectId)
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(memberId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 4. Documents Collection
+    match /documents/{documentId} {
+      allow get: if isSignedIn() && isValidId(documentId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(documentId) &&
+        isValidProjectDocument(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(documentId) && isValidProjectDocument(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['analysisStatus', 'extractedText', 'pageCount', 'updatedAt']) &&
+          isValidParentProject(existing().projectId)
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(documentId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 5. Extracted Knowledge Collection
+    match /extractedKnowledge/{knowledgeId} {
+      allow get: if isSignedIn() && isValidId(knowledgeId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(knowledgeId) &&
+        isValidExtractedKnowledge(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(knowledgeId) && isValidExtractedKnowledge(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['executiveSummary', 'completedWorkSummary', 'timelineEvents', 'contradictions', 'missingInformation', 'unresolvedQuestions', 'recommendedNextActions', 'confidenceScore', 'sourceDocumentCount', 'updatedAt']) &&
+          isValidParentProject(existing().projectId)
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(knowledgeId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 6. Decisions Collection
+    match /decisions/{decisionId} {
+      allow get: if isSignedIn() && isValidId(decisionId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(decisionId) &&
+        isValidDecision(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(decisionId) && isValidDecision(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'rationale', 'decisionMaker', 'decisionDate', 'evidenceType', 'confidence', 'reviewStatus', 'reviewerComment', 'updatedAt']) &&
+          isValidParentProject(existing().projectId)
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(decisionId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 7. Tasks Collection
+    match /tasks/{taskId} {
+      allow get: if isSignedIn() && isValidId(taskId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(taskId) &&
+        isValidTaskItem(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(taskId) && isValidTaskItem(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'taskStatus', 'priority', 'assignedOwner', 'evidenceType', 'confidence', 'reviewStatus', 'reviewerComment', 'updatedAt']) &&
+          isValidParentProject(existing().projectId)
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(taskId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 8. Risks Collection
+    match /risks/{riskId} {
+      allow get: if isSignedIn() && isValidId(riskId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(riskId) &&
+        isValidRiskItem(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(riskId) && isValidRiskItem(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'severity', 'mitigationPlan', 'evidenceType', 'confidence', 'reviewStatus', 'reviewerComment', 'updatedAt']) &&
+          isValidParentProject(existing().projectId)
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(riskId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 9. Dependencies Collection
+    match /dependencies/{dependencyId} {
+      allow get: if isSignedIn() && isValidId(dependencyId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(dependencyId) &&
+        isValidDependencyItem(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(dependencyId) && isValidDependencyItem(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'dependencyType', 'status', 'ownerContact', 'reviewStatus', 'reviewerComment', 'updatedAt']) &&
+          isValidParentProject(existing().projectId)
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(dependencyId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 10. Reviews Collection (Immutable audit history once created)
+    match /reviews/{reviewId} {
+      allow get: if isSignedIn() && isValidId(reviewId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(reviewId) &&
+        isValidReviewLog(incoming()) &&
+        incoming().createdAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(reviewId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 11. Handovers Collection
+    match /handovers/{handoverId} {
+      allow get: if isSignedIn() && isValidId(handoverId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(handoverId) &&
+        isValidHandoverReport(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(handoverId) && isValidHandoverReport(incoming()) && (
+        isAdmin() || (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'targetRole', 'recipientName', 'overviewSection', 'completedWorkSection', 'pendingWorkSection', 'decisionsSection', 'risksDependenciesSection', 'unresolvedIssuesSection', 'nextActionsSection', 'shareStatus', 'sharedWithEmails', 'updatedAt']) &&
+          isValidParentProject(existing().projectId)
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(handoverId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 12. Activity Logs Collection (Immutable audit trail)
+    match /activityLogs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(logId) &&
+        isValidActivityLog(incoming()) &&
+        incoming().createdAt == request.time &&
+        isValidParentProject(incoming().projectId);
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(logId) && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+  }
+}

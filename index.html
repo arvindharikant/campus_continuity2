@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      (function () {
+        // 1. Suppress third-party Chrome extension script errors from triggering app error boundary
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (
+              (event && event.filename && String(event.filename).indexOf('chrome-extension://') === 0) ||
+              (event && event.message && String(event.message).indexOf('Cannot set property fetch') !== -1)
+            ) {
+              event.stopImmediatePropagation();
+              event.preventDefault();
+              return false;
+            }
+          },
+          true
+        );
+
+        // 2. Preserve native window.fetch so third-party extensions cannot throw getter-only
+        //    TypeErrors OR hijack/stall Firebase/Firestore network requests
+        var nativeDefineProperty = Object.defineProperty;
+        var nativeFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
+
+        function protectFetchProperty(target) {
+          if (!target || !nativeFetch) return;
+          try {
+            var desc = Object.getOwnPropertyDescriptor(target, 'fetch');
+            if (desc && desc.configurable !== false) {
+              nativeDefineProperty.call(Object, target, 'fetch', {
+                configurable: true,
+                enumerable: desc.enumerable !== false,
+                get: function () {
+                  return nativeFetch;
+                },
+                set: function () {
+                  // Safe no-op: prevents extension TypeError and blocks fetch hijacking
+                },
+              });
+            }
+          } catch (_err) {}
+        }
+
+        protectFetchProperty(window);
+        if (typeof Window !== 'undefined' && Window.prototype) {
+          protectFetchProperty(Window.prototype);
+        }
+
+        // 3. Guard future Object.defineProperty(window, 'fetch', ...) calls from extensions
+        try {
+          Object.defineProperty = function (obj, prop, descriptor) {
+            if (
+              prop === 'fetch' &&
+              nativeFetch &&
+              (obj === window || (typeof Window !== 'undefined' && obj === Window.prototype))
+            ) {
+              return obj;
+            }
+            return nativeDefineProperty.call(Object, obj, prop, descriptor);
+          };
+        } catch (_err) {}
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Knowledge Handover Platform</title>
+    <meta name="description" content="Enterprise AI-powered project continuity and evidence-linked knowledge reconstruction platform for seamless team handovers." />
+    <meta property="og:title" content="Knowledge Handover Platform" />
+    <meta property="og:description" content="Enterprise AI-powered project continuity and evidence-linked knowledge reconstruction platform for seamless team handovers." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-teal-600 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
